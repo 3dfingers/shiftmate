@@ -21,6 +21,13 @@ function loadData() {
   } catch (_) { return blank(); }
 }
 let D = loadData();
+// The first version marked shifts "In Calendar" as soon as the button was tapped,
+// but iPhone Home Screen apps didn't actually save them. Reset those marks once.
+if (!D.calFix1) {
+  for (const s of D.shifts) if (s.cal === "added" || s.cal === "stale") s.cal = "none";
+  D.calFix1 = true;
+  try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (_) {}
+}
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(D)); return true; }
   catch (_) { toast("Couldn't save on this phone. Storage may be full or blocked.", true); return false; }
@@ -194,7 +201,7 @@ function homeView() {
   const missingCal = needsCalendar();
   if (missingCal.length) attention.push(`<div class="attn"><div class="ic c-teal">${icon("calplus")}</div>
       <div><b>${missingCal.length} shift${missingCal.length > 1 ? "s" : ""} not in your Calendar</b><span>Add ${missingCal.length > 1 ? "them" : "it"} so your iPhone reminds you</span></div>
-      <a class="btn sm primary" href="${calHref(missingCal)}" data-cal="${missingCal.map((s) => s.id).join(",")}">Add</a></div>`);
+      ${calAction(missingCal, "Add", "btn sm primary")}</div>`);
   for (const s of sorted()) {
     if (!live(s) || s.endUtc < now) continue;
     const f = C.flags(s, D.shifts);
@@ -251,7 +258,8 @@ function nextCard(s) {
     <button class="btn primary" data-new>${icon("plus")} Add shift</button></div></div>`;
   const liveNow = Date.now() >= s.startUtc;
   const d = C.ymd(s.startUtc, tz());
-  const label = d === today() ? "Today" : d === C.addDays(today(), 1) ? "Tomorrow" : dayName(d);
+  const label = d === today() ? "Today" : d === C.addDays(today(), 1) ? "Tomorrow"
+    : new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(d + "T12:00:00Z"));
   return `<div class="next ${liveNow ? "live" : ""}" data-open="${s.id}" style="cursor:pointer">
     <div class="next-top"><div class="datebox"><span class="pill">${label}</span><b>${Number(d.slice(8))}</b><small>${dayName(d)}</small></div>
       <div><div class="where">${esc(placeOf(s))}${s.role && empName(s) ? ` • ${esc(s.role)}` : ""}</div>
@@ -378,10 +386,11 @@ function settingsView() {
       <div class="row" style="display:block"><div class="txt"><b>Default reminders for new shifts</b><span>Each becomes an alert on the Calendar event.</span></div>
         <div class="presets" style="margin-top:.6rem">${PRESETS.map((m) => `<button type="button" class="preset" data-defrem="${m}" aria-pressed="${D.settings.defaultReminders.includes(m)}">${remShort(m)}</button>`).join("")}</div></div>
       <div class="row"><div class="ic c-teal">${icon("calplus")}</div><div class="txt"><b>Add upcoming shifts to Calendar</b><span>${missing.length ? `${missing.length} not added yet` : "All upcoming shifts are in your Calendar"}</span></div>
-        ${missing.length ? `<a class="btn sm primary" href="${calHref(missing)}" data-cal="${missing.map((s) => s.id).join(",")}">Add</a>` : ""}</div>
+        ${missing.length ? calAction(missing, "Add", "btn sm primary") : ""}</div>
       <details class="howto"><summary>How Calendar reminders work</summary><ul>
-        <li>Tap <b>Add to Calendar</b> on a shift, then <b>Add All</b> in the window that opens. Your iPhone then alerts you at each reminder time, even when ShiftMate is closed.</li>
-        <li>If nothing opens, use <b>Save calendar file</b> instead, then open the file and tap <b>Add All</b>.</li>
+        <li>Tap <b>Add to Calendar</b> on a shift. In the menu, choose <b>Mail</b> and send it to yourself (or <b>Save to Files</b>).</li>
+        <li>Open the email (or Files) and tap the <b>.ics</b> file, then <b>Add All</b>. Your iPhone then alerts you at each reminder time, even when ShiftMate is closed.</li>
+        <li>Tip: add several shifts at once with <b>Add upcoming shifts to Calendar</b> above, so it's one email for the whole week.</li>
         <li>Make sure alerts are on: iPhone <b>Settings → Notifications → Calendar → Allow Notifications</b>.</li>
         <li>If you <b>change or cancel</b> a shift, delete the old event in the Calendar app, then add the shift again.</li>
         <li>While ShiftMate is open, it also shows reminders on screen.</li></ul></details>
@@ -416,10 +425,35 @@ function openSheet(html) {
 }
 sheet.addEventListener("click", (e) => { if (e.target === sheet || e.target.closest("[data-close]")) sheet.close(); });
 
+// On an iPhone Home Screen app, opening a calendar file shows "Add All" but iOS
+// doesn't actually save the event. Sending the file through the share menu
+// (Mail to yourself, or Save to Files) and opening it from there does work.
+const useShareMenu = () => isIOS() && isStandalone();
+function calAction(list, label = "Add to Calendar", cls = "btn primary") {
+  const ids = list.map((s) => s.id).join(",");
+  return useShareMenu()
+    ? `<button class="${cls}" data-calfile="${ids}">${icon("calplus")} ${label}</button>`
+    : `<a class="${cls}" href="${calHref(list)}" data-cal="${ids}">${icon("calplus")} ${label}</a>`;
+}
 function calButtons(list, label = "Add to Calendar") {
   const ids = list.map((s) => s.id).join(",");
-  return `<div class="sheet-actions"><a class="btn primary" href="${calHref(list)}" data-cal="${ids}">${icon("calplus")} ${label}</a></div>
-    <div class="sheet-actions"><button class="btn" data-calfile="${ids}">${icon("share")} Save calendar file</button></div>`;
+  return `<div class="sheet-actions">${calAction(list, label)}</div>
+    ${useShareMenu() ? "" : `<div class="sheet-actions"><button class="btn" data-calfile="${ids}">${icon("share")} Save calendar file</button></div>`}`;
+}
+/** After sending the file: explain the last step, and only mark it added once the user says it worked. */
+function calConfirm(ids, via) {
+  const steps = via === "share"
+    ? `<ol class="steps">
+        <li>In the menu that opened, tap <b>Mail</b> and send it to <b>yourself</b>. Or tap <b>Save to Files</b>.</li>
+        <li>Open the email (or the <b>Files</b> app) and tap the <b>.ics</b> file.</li>
+        <li>Tap <b>Add All</b>.</li></ol>`
+    : `<ol class="steps"><li>In the calendar window that opened, tap <b>Add All</b>.</li>
+        <li>If nothing opened, tap <b>Try again</b> below.</li></ol>`;
+  openSheet(`<h2 id="sheet-title">Add to Calendar<button data-close aria-label="Close">${icon("x")}</button></h2>
+    ${steps}
+    <p class="small muted" style="margin:.2rem 0 .6rem">Then check your Calendar app. Is the shift there?</p>
+    <div class="sheet-actions"><button class="btn primary" data-calok="${ids}">${icon("check")} Yes, it's in my Calendar</button></div>
+    <div class="sheet-actions"><button class="btn" data-calfile="${ids}">${icon("share")} Try again</button></div>`);
 }
 function shiftDetail(id) {
   const s = D.shifts.find((x) => x.id === id);
@@ -429,7 +463,7 @@ function shiftDetail(id) {
   const calState = !live(s) || past ? "" : s.cal === "stale"
     ? `<div class="warnbox" style="margin-bottom:.6rem">You changed this shift after adding it to your Calendar. Delete the old event in the Calendar app, then add it again.</div>${calButtons([s], "Add updated shift")}`
     : s.cal === "added" ? `<p class="small muted" style="margin:0 0 .4rem">${icon("check")} In your Calendar. Your iPhone will remind you.</p>
-        <div class="sheet-actions"><button class="btn" data-calfile="${s.id}">${icon("share")} Save calendar file again</button></div>`
+        <div class="sheet-actions">${calAction([s], "Not there? Add again", "btn")}</div>`
     : calButtons([s]);
   openSheet(`
     <h2 id="sheet-title">${esc(placeOf(s))}<button data-close aria-label="Close">${icon("x")}</button></h2>
@@ -618,15 +652,18 @@ document.addEventListener("click", (e) => {
   if (b) { window.setTheme(b.dataset.themeSet); $$(".theme-pick").forEach((el) => (el.innerHTML = themePicker())); }
 });
 document.addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-new],[data-open],[data-edit],[data-act],[data-day],[data-week],[data-cal],[data-calfile],[data-rem],[data-remadd],[data-defrem],[data-save-profile],[data-del-emp],[data-export],[data-import],[data-erase]");
+  const t = e.target.closest("[data-new],[data-open],[data-edit],[data-act],[data-day],[data-week],[data-cal],[data-calfile],[data-calok],[data-rem],[data-remadd],[data-defrem],[data-save-profile],[data-del-emp],[data-export],[data-import],[data-erase]");
   if (!t || !D.profile) return;
   const d = t.dataset;
   if (d.cal) {
-    // Let the link open the calendar file; just remember these shifts were added.
-    const ids = d.cal.split(",").map(Number);
-    markInCalendar(ids);
-    setTimeout(() => { render(); if (sheet.open) sheet.close(); toast("In the Calendar window, tap Add All. If nothing opened, use Save calendar file."); }, 400);
+    // Let the link open the calendar file, then ask whether it worked.
+    setTimeout(() => calConfirm(d.cal, "link"), 600);
     return;
+  }
+  if (d.calok) {
+    markInCalendar(d.calok.split(",").map(Number));
+    sheet.close(); render();
+    return toast("Great, your iPhone will remind you before the shift.");
   }
   e.preventDefault();
   if ("new" in d) return shiftForm(null, S.tab === "schedule" && S.day >= today() ? S.day : null);
@@ -636,10 +673,7 @@ document.addEventListener("click", async (e) => {
   if (d.week) { S.day = C.addDays(S.day, Number(d.week)); return render(); }
   if (d.calfile) {
     const ids = d.calfile.split(",").map(Number);
-    if (await shareCalendarFile(D.shifts.filter((s) => ids.includes(s.id)))) {
-      markInCalendar(ids); render(); if (sheet.open) sheet.close();
-      toast("Open the file and tap Add All to put it in your Calendar.");
-    }
+    if (await shareCalendarFile(D.shifts.filter((s) => ids.includes(s.id)))) calConfirm(d.calfile, "share");
     return;
   }
   if (d.rem) {

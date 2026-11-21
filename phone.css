@@ -12,4 +12,7 @@
 .sheet-actions a.btn { text-align: center; }
 .detail-list svg { width: 1.1em; height: 1.1em; }
 .sheet p.small svg { width: 1em; height: 1em; vertical-align: -2px; color: var(--green); }
+.steps { margin: 0 0 .4rem; padding-left: 1.3rem; display: grid; gap: .55rem; }
+.steps li { padding-left: .2rem; line-height: 1.45; }
+.steps li::marker { color: var(--blue); font-weight: 800; }
 .welcome-note { color: var(--navy-muted); font-size: .85rem; text-align: center; }

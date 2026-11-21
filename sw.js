@@ -2,7 +2,7 @@
 // 1. Keeps the app's files on the phone so it opens instantly and works offline.
 // 2. Serves "calendar.ics?d=..." as a real calendar file, so tapping
 //    "Add to Calendar" makes the iPhone show its "Add All" calendar screen.
-const CACHE = "shiftmate-phone-v1";
+const CACHE = "shiftmate-phone-v2";
 const SHELL = ["./", "index.html", "app.js", "core.js", "styles.css", "phone.css", "theme.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
