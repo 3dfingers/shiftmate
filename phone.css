@@ -1,0 +1,15 @@
+/* Extras for the phone version (on top of styles.css) */
+.wk { padding: .7rem 0; border-top: 1px solid var(--line); }
+.wk:first-child { border-top: 0; padding-top: .2rem; }
+.wk-top { display: flex; justify-content: space-between; gap: .5rem; font-size: .88rem; flex-wrap: wrap; }
+.wk .bar { margin: .45rem 0 0; }
+.wk.cur .bar i { background: linear-gradient(90deg, var(--blue), var(--blue-2)); }
+.wk.cur .bar.warn i { background: linear-gradient(90deg, #e59a12, #f3bd4c); }
+.limit-line { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--red); border-radius: 2px; z-index: 1; opacity: .7; }
+.bar { overflow: visible; }
+.bar i { position: relative; }
+.del-emp { color: var(--red); }
+.sheet-actions a.btn { text-align: center; }
+.detail-list svg { width: 1.1em; height: 1.1em; }
+.sheet p.small svg { width: 1em; height: 1em; vertical-align: -2px; color: var(--green); }
+.welcome-note { color: var(--navy-muted); font-size: .85rem; text-align: center; }
